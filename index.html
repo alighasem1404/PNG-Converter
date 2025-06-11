@@ -44,7 +44,7 @@ https://www.libpng.org/pub/png/images/agif_test.png"
         </div>
 
         <!-- Image Names Input -->
-        <div class="mb-6 text-left">
+        <div class="mb-4 text-left">
             <label for="imageNamesInput" class="block text-gray-200 text-sm font-bold mb-2">Desired Image Names (for JPGs):</label>
             <textarea id="imageNamesInput"
                       class="w-full h-32 p-4 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white placeholder-gray-400"
@@ -54,6 +54,12 @@ My_First_Image
 Test_Image_from_LibPNG"
             ></textarea>
             <p class="text-gray-400 text-xs mt-1">Make sure the number of names matches the number of URLs.</p>
+        </div>
+
+        <!-- Sequential Naming Checkbox -->
+        <div class="mb-6 text-left">
+            <input type="checkbox" id="useSequentialNaming" class="mr-2 h-4 w-4 text-blue-600 rounded focus:ring-blue-500 border-gray-600 bg-gray-700">
+            <label for="useSequentialNaming" class="text-gray-200 text-sm font-medium">Use Sequential Naming (e.g., "my_image_1.jpg")</label>
         </div>
 
         <button id="convertAndDownloadButton"
@@ -69,7 +75,8 @@ Test_Image_from_LibPNG"
 
     <script>
         const pngUrlInput = document.getElementById('pngUrlInput');
-        const imageNamesInput = document.getElementById('imageNamesInput'); // New input
+        const imageNamesInput = document.getElementById('imageNamesInput');
+        const useSequentialNamingCheckbox = document.getElementById('useSequentialNaming'); // New checkbox reference
         const convertAndDownloadButton = document.getElementById('convertAndDownloadButton');
         const statusMessage = document.getElementById('statusMessage');
         const canvas = document.getElementById('conversionCanvas');
@@ -144,16 +151,15 @@ Test_Image_from_LibPNG"
 
         convertAndDownloadButton.addEventListener('click', async () => {
             const urlsText = pngUrlInput.value.trim();
-            const namesText = imageNamesInput.value.trim(); // Get names input
+            const namesText = imageNamesInput.value.trim();
+            const useSequential = useSequentialNamingCheckbox.checked; // Get checkbox state
 
             if (!urlsText) {
                 showStatus('Please enter at least one PNG image URL.', 'error');
                 return;
             }
 
-            // Split the input text into an array of URLs, filtering out empty lines
             const pngUrls = urlsText.split('\n').map(url => url.trim()).filter(url => url.length > 0);
-            // Split the names text into an array of names, filtering out empty lines
             const imageNames = namesText.split('\n').map(name => name.trim()).filter(name => name.length > 0);
 
             if (pngUrls.length === 0) {
@@ -161,8 +167,8 @@ Test_Image_from_LibPNG"
                 return;
             }
 
-            // Check if the number of names matches the number of URLs
-            if (namesText && imageNames.length !== pngUrls.length) {
+            // Only check name count if sequential naming is NOT used and names are provided
+            if (!useSequential && namesText && imageNames.length !== pngUrls.length) {
                 showStatus(`Error: Number of image names (${imageNames.length}) does not match number of URLs (${pngUrls.length}). Please provide one name per URL.`, 'error');
                 return;
             }
@@ -173,31 +179,45 @@ Test_Image_from_LibPNG"
             let successfulConversions = 0;
             let failedConversions = 0;
 
+            // Determine the base name for sequential numbering
+            let sequentialBaseName = 'converted_image';
+            if (useSequential && imageNames.length > 0 && imageNames[0]) {
+                sequentialBaseName = imageNames[0]; // Use the first provided name as base
+            }
+
+
             for (let i = 0; i < pngUrls.length; i++) {
                 const url = pngUrls[i];
-                let desiredName = imageNames[i]; // Get the desired name for the current URL
+                let filenameToUse;
 
-                // Fallback if no specific name is provided or if it's empty
-                if (!desiredName) {
-                    // Extract a filename from the URL, or use a generic one
-                    let urlFilename = url.substring(url.lastIndexOf('/') + 1);
-                    if (urlFilename.includes('?')) { // Remove query parameters from filename
-                        urlFilename = urlFilename.substring(0, urlFilename.indexOf('?'));
-                    }
-                    if (!urlFilename || urlFilename.length === 0 || urlFilename.includes('.')) {
-                        desiredName = `converted_image_${i + 1}`;
+                if (useSequential) {
+                    // Use sequential naming: base_name_1.jpg, base_name_2.jpg, etc.
+                    filenameToUse = `${sequentialBaseName}_${i + 1}.jpg`;
+                } else {
+                    // Use standard naming: custom name, then URL-derived, then generic
+                    let desiredName = imageNames[i];
+                    if (desiredName) {
+                        filenameToUse = `${desiredName}.jpg`;
                     } else {
-                        desiredName = urlFilename;
+                        // Fallback if no specific name is provided or if it's empty
+                        let urlFilename = url.substring(url.lastIndexOf('/') + 1);
+                        if (urlFilename.includes('?')) {
+                            urlFilename = urlFilename.substring(0, urlFilename.indexOf('?'));
+                        }
+                        if (!urlFilename || urlFilename.length === 0 || urlFilename.includes('.')) {
+                            filenameToUse = `converted_image_${i + 1}.jpg`;
+                        } else {
+                            filenameToUse = `${urlFilename}.jpg`;
+                        }
                     }
                 }
 
-                showStatus(`Processing image ${i + 1} of ${pngUrls.length} (${desiredName}.jpg)...`, 'info');
+                showStatus(`Processing image ${i + 1} of ${pngUrls.length} (${filenameToUse})...`, 'info');
 
                 const jpgDataUrl = await convertPngToJpg(url);
 
                 if (jpgDataUrl) {
-                    const filename = `${desiredName}.jpg`; // Ensure .jpg extension
-                    downloadFile(jpgDataUrl, filename);
+                    downloadFile(jpgDataUrl, filenameToUse);
                     successfulConversions++;
                 } else {
                     failedConversions++;
