@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PNG to JPG Batch Converter & Downloader</title>
+    <title>PNG to JPG Smart Converter & Downloader</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -28,55 +28,56 @@
 </head>
 <body class="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-2xl text-center">
-        <h1 class="text-3xl font-bold mb-6 text-white">Batch PNG to JPG Converter</h1>
-        <p class="text-gray-300 mb-6">Enter one or more PNG image URLs below, each on a new line. Then, provide corresponding names for the output JPG files (one name per line). The converted JPGs will be downloaded to your device.</p>
+        <h1 class="text-3xl font-bold mb-6 text-white">Batch PNG to JPG Smart Converter</h1>
+        <p class="text-gray-300 mb-6">
+            Enter PNG image URLs to convert to JPG, or other image URLs to just rename and download.
+            Each on a new line. Then, provide corresponding names for the output files.
+        </p>
 
-        <!-- PNG URLs Input -->
         <div class="mb-6 text-left">
-            <label for="pngUrlInput" class="block text-gray-200 text-sm font-bold mb-2">PNG Image URLs:</label>
+            <label for="pngUrlInput" class="block text-gray-200 text-sm font-bold mb-2">Image URLs:</label>
             <textarea id="pngUrlInput"
                       class="w-full h-48 p-4 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white placeholder-gray-400"
-                      placeholder="Enter PNG image URLs here (one per line):
+                      placeholder="Enter image URLs here (one per line):
 e.g.,
 https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png
-https://www.libpng.org/pub/png/images/agif_test.png"
+https://www.libpng.org/pub/png/images/agif_test.png
+https://www.w3.org/People/mimasa/test/gif/sample.gif"
             ></textarea>
         </div>
 
-        <!-- Image Names Input -->
         <div class="mb-4 text-left">
-            <label for="imageNamesInput" class="block text-gray-200 text-sm font-bold mb-2">Desired Image Names (for JPGs):</label>
+            <label for="imageNamesInput" class="block text-gray-200 text-sm font-bold mb-2">Desired Output File Names:</label>
             <textarea id="imageNamesInput"
                       class="w-full h-32 p-4 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white placeholder-gray-400"
-                      placeholder="Enter desired names for the output JPGs (one per line, must match URL order):
+                      placeholder="Enter desired names for the output files (one per line, must match URL order):
 e.g.,
-My_First_Image
-Test_Image_from_LibPNG"
+My_First_JPG
+Test_LibPNG_Image
+Sample_GIF"
             ></textarea>
             <p class="text-gray-400 text-xs mt-1">Make sure the number of names matches the number of URLs.</p>
         </div>
 
-        <!-- Sequential Naming Checkbox -->
         <div class="mb-6 text-left">
             <input type="checkbox" id="useSequentialNaming" class="mr-2 h-4 w-4 text-blue-600 rounded focus:ring-blue-500 border-gray-600 bg-gray-700">
-            <label for="useSequentialNaming" class="text-gray-200 text-sm font-medium">Use Sequential Naming (e.g., "my_image_1.jpg")</label>
+            <label for="useSequentialNaming" class="text-gray-200 text-sm font-medium">Use Sequential Naming (e.g., "my_image_1.jpg" or "my_image_1.gif")</label>
         </div>
 
         <button id="convertAndDownloadButton"
                 class="bg-blue-600 text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">
-            Convert & Download All JPGs
+            Process & Download All Files
         </button>
 
         <div id="statusMessage" class="mt-6 p-4 rounded-md text-sm text-center font-medium" style="display: none;"></div>
 
-        <!-- Hidden canvas for image conversion -->
         <canvas id="conversionCanvas" class="hidden"></canvas>
     </div>
 
     <script>
         const pngUrlInput = document.getElementById('pngUrlInput');
         const imageNamesInput = document.getElementById('imageNamesInput');
-        const useSequentialNamingCheckbox = document.getElementById('useSequentialNaming'); // New checkbox reference
+        const useSequentialNamingCheckbox = document.getElementById('useSequentialNaming');
         const convertAndDownloadButton = document.getElementById('convertAndDownloadButton');
         const statusMessage = document.getElementById('statusMessage');
         const canvas = document.getElementById('conversionCanvas');
@@ -98,86 +99,59 @@ Test_Image_from_LibPNG"
         }
 
         /**
-         * Fetches an image from a URL, draws it to a canvas, and converts it to JPG.
-         * @param {string} url The URL of the PNG image.
-         * @returns {Promise<string|null>} A promise that resolves with the JPG Data URL or null if conversion fails.
-         */
-        async function convertPngToJpg(url) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                // To prevent CORS issues when loading images from other domains
-                // If images are on different domains and don't allow CORS, this will fail.
-                img.crossOrigin = "Anonymous";
-
-                img.onload = () => {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-
-                    try {
-                        // Convert to JPG data URL with a quality of 0.9 (0 to 1, 1 being highest quality)
-                        const jpgDataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                        resolve(jpgDataUrl);
-                    } catch (e) {
-                        console.error(`Error converting image ${url} to JPG:`, e);
-                        showStatus(`Failed to convert image from ${url}. It might be a CORS issue or invalid image.`, 'error');
-                        resolve(null);
-                    }
-                };
-
-                img.onerror = (e) => {
-                    console.error(`Error loading image from ${url}:`, e);
-                    showStatus(`Failed to load image from ${url}. Please check the URL or CORS settings.`, 'error');
-                    resolve(null);
-                };
-
-                img.src = url;
-            });
-        }
-
-        /**
-         * Triggers the download of a Data URL as a file.
-         * @param {string} dataUrl The Data URL of the file (e.g., 'data:image/jpeg;base64,...').
+         * Triggers the download of a Blob or Data URL as a file.
+         * @param {Blob | string} dataToDownload The Blob object or Data URL string to download.
          * @param {string} filename The desired filename for the downloaded file.
          */
-        function downloadFile(dataUrl, filename) {
+        function downloadFile(dataToDownload, filename) {
+            let url;
+            if (dataToDownload instanceof Blob) {
+                url = URL.createObjectURL(dataToDownload);
+            } else { // Assume Data URL
+                url = dataToDownload;
+            }
+
             const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = filename; // Suggests a filename for the download
-            document.body.appendChild(a); // Append to body to make it clickable
-            a.click(); // Programmatically click the link to trigger download
-            document.body.removeChild(a); // Clean up the element
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // Clean up the object URL if it was created from a Blob
+            if (dataToDownload instanceof Blob) {
+                URL.revokeObjectURL(url);
+            }
         }
 
         convertAndDownloadButton.addEventListener('click', async () => {
             const urlsText = pngUrlInput.value.trim();
             const namesText = imageNamesInput.value.trim();
-            const useSequential = useSequentialNamingCheckbox.checked; // Get checkbox state
+            const useSequential = useSequentialNamingCheckbox.checked;
 
             if (!urlsText) {
-                showStatus('Please enter at least one PNG image URL.', 'error');
+                showStatus('Please enter at least one image URL.', 'error');
                 return;
             }
 
-            const pngUrls = urlsText.split('\n').map(url => url.trim()).filter(url => url.length > 0);
+            const imageUrls = urlsText.split('\n').map(url => url.trim()).filter(url => url.length > 0);
             const imageNames = namesText.split('\n').map(name => name.trim()).filter(name => name.length > 0);
 
-            if (pngUrls.length === 0) {
-                showStatus('No valid PNG URLs found.', 'error');
+            if (imageUrls.length === 0) {
+                showStatus('No valid image URLs found.', 'error');
                 return;
             }
 
-            // Only check name count if sequential naming is NOT used and names are provided
-            if (!useSequential && namesText && imageNames.length !== pngUrls.length) {
-                showStatus(`Error: Number of image names (${imageNames.length}) does not match number of URLs (${pngUrls.length}). Please provide one name per URL.`, 'error');
+            if (!useSequential && namesText && imageNames.length !== imageUrls.length) {
+                showStatus(`Error: Number of desired names (${imageNames.length}) does not match number of URLs (${imageUrls.length}). Please provide one name per URL.`, 'error');
                 return;
             }
 
             convertAndDownloadButton.disabled = true;
-            showStatus(`Starting conversion and download for ${pngUrls.length} image(s)...`, 'info');
+            showStatus(`Starting process for ${imageUrls.length} file(s)...`, 'info');
 
-            let successfulConversions = 0;
-            let failedConversions = 0;
+            let successfulProcesses = 0;
+            let failedProcesses = 0;
 
             // Determine the base name for sequential numbering
             let sequentialBaseName = 'converted_image';
@@ -185,53 +159,121 @@ Test_Image_from_LibPNG"
                 sequentialBaseName = imageNames[0]; // Use the first provided name as base
             }
 
+            for (let i = 0; i < imageUrls.length; i++) {
+                const url = imageUrls[i];
 
-            for (let i = 0; i < pngUrls.length; i++) {
-                const url = pngUrls[i];
-                let filenameToUse;
-
+                // Determine the base filename (without extension), considering sequential option
+                let baseFileName;
                 if (useSequential) {
-                    // Use sequential naming: base_name_1.jpg, base_name_2.jpg, etc.
-                    filenameToUse = `${sequentialBaseName}_${i + 1}.jpg`;
+                    baseFileName = `${sequentialBaseName}_${i + 1}`;
                 } else {
-                    // Use standard naming: custom name, then URL-derived, then generic
                     let desiredName = imageNames[i];
                     if (desiredName) {
-                        filenameToUse = `${desiredName}.jpg`;
+                        baseFileName = desiredName;
                     } else {
                         // Fallback if no specific name is provided or if it's empty
                         let urlFilename = url.substring(url.lastIndexOf('/') + 1);
                         if (urlFilename.includes('?')) {
                             urlFilename = urlFilename.substring(0, urlFilename.indexOf('?'));
                         }
-                        if (!urlFilename || urlFilename.length === 0 || urlFilename.includes('.')) {
-                            filenameToUse = `converted_image_${i + 1}.jpg`;
+                        if (urlFilename.includes('.')) { // Remove existing extension from URL filename
+                            urlFilename = urlFilename.substring(0, urlFilename.lastIndexOf('.'));
+                        }
+                        if (!urlFilename || urlFilename.length === 0) {
+                            baseFileName = `image_${i + 1}`; // Generic fallback if URL has no good name
                         } else {
-                            filenameToUse = `${urlFilename}.jpg`;
+                            baseFileName = urlFilename;
                         }
                     }
                 }
 
-                showStatus(`Processing image ${i + 1} of ${pngUrls.length} (${filenameToUse})...`, 'info');
+                showStatus(`Processing file ${i + 1} of ${imageUrls.length} (${baseFileName})...`, 'info');
 
-                const jpgDataUrl = await convertPngToJpg(url);
+                let response;
+                try {
+                    response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                } catch (e) {
+                    console.error(`Failed to fetch ${url}:`, e);
+                    showStatus(`Failed to fetch ${url}: ${e.message}`, 'error');
+                    failedProcesses++;
+                    continue; // Skip to next URL
+                }
 
-                if (jpgDataUrl) {
-                    downloadFile(jpgDataUrl, filenameToUse);
-                    successfulConversions++;
+                const originalBlob = await response.blob();
+                const originalMimeType = originalBlob.type;
+
+                let finalBlobToDownload = null;
+                let finalExtension = '';
+
+                if (originalMimeType === 'image/png') {
+                    // --- This is a PNG, convert to JPG ---
+                    finalExtension = 'jpg';
+                    const jpgDataUrl = await new Promise(resolve => {
+                        const img = new Image();
+                        img.crossOrigin = "Anonymous"; // Crucial for cross-origin images
+                        img.onload = () => {
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            ctx.drawImage(img, 0, 0);
+                            try {
+                                resolve(canvas.toDataURL('image/jpeg', 0.9));
+                            } catch (e) {
+                                console.error(`Error converting ${url} to JPG (likely CORS issue or tainted canvas):`, e);
+                                showStatus(`Error converting PNG from ${url} (CORS issue?): ${e.message}`, 'error');
+                                resolve(null); // Resolve with null on error
+                            } finally {
+                                URL.revokeObjectURL(img.src); // Clean up the object URL
+                            }
+                        };
+                        img.onerror = () => {
+                            console.error(`Error loading PNG to canvas from ${url} (possible network/image issue).`);
+                            showStatus(`Error loading PNG from ${url}. It might be corrupted or inaccessible.`, 'error');
+                            resolve(null); // Resolve with null on error
+                            URL.revokeObjectURL(img.src); // Clean up
+                        };
+                        img.src = URL.createObjectURL(originalBlob);
+                    });
+
+                    if (jpgDataUrl) {
+                        // Convert DataURL back to Blob for consistent downloadFile handling
+                        finalBlobToDownload = await (await fetch(jpgDataUrl)).blob();
+                    } else {
+                        failedProcesses++; // Count as failed if DataURL conversion failed
+                        continue;
+                    }
+
+                } else if (originalMimeType.startsWith('image/')) {
+                    // --- Not a PNG, but another image type, download as is ---
+                    finalBlobToDownload = originalBlob;
+                    finalExtension = originalMimeType.split('/')[1]; // e.g., 'jpeg', 'gif', 'webp'
+                    if (finalExtension === 'jpeg') finalExtension = 'jpg'; // Normalize jpeg to jpg
+                    if (finalExtension === 'svg+xml') finalExtension = 'svg'; // Normalize svg+xml to svg
                 } else {
-                    failedConversions++;
+                    // --- Not an image at all, skip ---
+                    showStatus(`Skipping ${url}: Not a recognized image type (${originalMimeType}).`, 'info');
+                    failedProcesses++;
+                    continue;
+                }
+
+                // Perform download if a valid blob was prepared
+                if (finalBlobToDownload) {
+                    downloadFile(finalBlobToDownload, `${baseFileName}.${finalExtension}`);
+                    successfulProcesses++;
+                } else {
+                    failedProcesses++; // Should be caught by earlier null checks, but as a safeguard
+                    showStatus(`Error: Could not prepare file for download from ${url}.`, 'error');
                 }
             }
 
             convertAndDownloadButton.disabled = false;
 
-            if (successfulConversions > 0 && failedConversions === 0) {
-                showStatus(`All ${successfulConversions} image(s) converted and downloaded successfully!`, 'success');
-            } else if (successfulConversions > 0 && failedConversions > 0) {
-                showStatus(`Completed. ${successfulConversions} image(s) converted, ${failedConversions} failed. Check console for details.`, 'info');
+            if (successfulProcesses > 0 && failedProcesses === 0) {
+                showStatus(`All ${successfulProcesses} file(s) processed and downloaded successfully!`, 'success');
+            } else if (successfulProcesses > 0 && failedProcesses > 0) {
+                showStatus(`Completed. ${successfulProcesses} file(s) processed, ${failedProcesses} failed. Check console for details.`, 'info');
             } else {
-                showStatus(`No images could be converted. Please check URLs and try again.`, 'error');
+                showStatus(`No files could be processed. Please check URLs and try again.`, 'error');
             }
         });
     </script>
