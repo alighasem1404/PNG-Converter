@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Sorter</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f0f2f5; /* Light gray background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+        .message-box {
+            background-color: #fee2e2; /* Red-100 */
+            color: #ef4444; /* Red-500 */
+            border: 1px solid #f87171; /* Red-400 */
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 0.9em;
+            display: none; /* Hidden by default */
+        }
+        .message-box.show {
+            display: block;
+        }
+        /* Style for success message */
+        .message-box.success {
+            background-color: #d1fae5; /* Green-100 */
+            color: #059669; /* Green-700 */
+            border: 1px solid #34d399; /* Green-400 */
+        }
+    </style>
+</head>
+<body class="selection:bg-blue-200">
+    <div class="container flex flex-col space-y-6">
+        <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-4">URL Sorter by Name Order</h1>
+
+        <!-- Input for URLs -->
+        <div>
+            <label for="urlsInput" class="block text-gray-700 text-sm font-medium mb-2">
+                Enter URLs (one per line):
+            </label>
+            <textarea
+                id="urlsInput"
+                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition duration-200"
+                placeholder="e.g.,&#10;https://i.postimg.cc/y8vBhKYM/Leader-Archivist-Veylis-the-Unwritten.jpg&#10;https://i.postimg.cc/TP1xCsKp/Leader-High-Ascendant-Xalzithis-the-Unblinking.jpg&#10;https://i.postimg.cc/XvPbhg5x/Leader-High-Exchequer-Valmire-the-Gilded.jpg"
+            ></textarea>
+        </div>
+
+        <!-- Input for Names -->
+        <div>
+            <label for="namesInput" class="block text-gray-700 text-sm font-medium mb-2">
+                Enter Names in Desired Output Order (one per line):
+            </label>
+            <textarea
+                id="namesInput"
+                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition duration-200"
+                placeholder="e.g.,&#10;High Ascendant Xalzithis the Unblinking&#10;High Exchequer Valmire the Gilded&#10;Archivist Veylis the Unwritten"
+            ></textarea>
+        </div>
+
+        <!-- Message Box for errors/info -->
+        <div id="messageBox" class="message-box"></div>
+
+        <!-- Sort Button -->
+        <button
+            id="sortButton"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+            Sort URLs by Name Order
+        </button>
+
+        <!-- Output for Sorted URLs -->
+        <div>
+            <label for="sortedUrlsOutput" class="block text-gray-700 text-sm font-medium mb-2">
+                Sorted URLs:
+            </label>
+            <textarea
+                id="sortedUrlsOutput"
+                class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed resize-none"
+                readonly
+                min-height="120px"
+            ></textarea>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlsInput = document.getElementById('urlsInput');
+            const namesInput = document.getElementById('namesInput');
+            const sortButton = document.getElementById('sortButton');
+            const sortedUrlsOutput = document.getElementById('sortedUrlsOutput');
+            const messageBox = document.getElementById('messageBox');
+
+            /**
+             * Displays a message in the message box.
+             * @param {string} message - The message to display.
+             * @param {boolean} isError - True if it's an error message, false for info/success.
+             */
+            function showMessage(message, isError = true) {
+                messageBox.textContent = message;
+                // Reset classes
+                messageBox.classList.remove('bg-fee2e2', 'text-ef4444', 'border-red-400', 'bg-blue-100', 'text-blue-700', 'border-blue-400', 'success');
+
+                if (isError) {
+                    messageBox.classList.add('bg-fee2e2', 'text-ef4444', 'border-red-400');
+                } else {
+                    messageBox.classList.add('success'); // Use the 'success' class for green message
+                }
+                messageBox.classList.add('show');
+            }
+
+            /**
+             * Hides the message box.
+             */
+            function hideMessage() {
+                messageBox.classList.remove('show');
+                messageBox.textContent = '';
+            }
+
+            /**
+             * Cleans a string for comparison by converting to lowercase and removing non-alphanumeric characters.
+             * This helps in matching names regardless of casing, spaces, or other symbols.
+             * @param {string} str - The input string.
+             * @returns {string} The cleaned string.
+             */
+            function cleanString(str) {
+                return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+            }
+
+            sortButton.addEventListener('click', () => {
+                hideMessage(); // Clear previous messages
+
+                // Get URLs, filter out empty lines, and convert to an array for easy manipulation
+                // Use slice() to create a shallow copy, allowing modification (splice) without affecting original input data
+                let availableUrls = urlsInput.value.split('\n').map(line => line.trim()).filter(line => line !== '');
+                // Get desired names, filter out empty lines
+                const desiredNameOrder = namesInput.value.split('\n').map(line => line.trim()).filter(line => line !== '');
+
+                // Input validation
+                if (availableUrls.length === 0 || desiredNameOrder.length === 0) {
+                    showMessage("Please enter both URLs and Names.");
+                    sortedUrlsOutput.value = '';
+                    return;
+                }
+
+                // Initialize an array to store the sorted URLs
+                const sortedUrls = [];
+                const unmatchedDesiredNames = []; // To track names that couldn't be matched
+
+                // Iterate through each desired name to find its corresponding URL
+                for (const desiredName of desiredNameOrder) {
+                    let foundMatch = false;
+                    let foundIndex = -1;
+
+                    // Clean the desired name for comparison
+                    const cleanedDesiredName = cleanString(desiredName);
+
+                    // Search through the available URLs
+                    for (let i = 0; i < availableUrls.length; i++) {
+                        const currentUrl = availableUrls[i];
+                        // Extract filename from URL (part after the last '/')
+                        const filename = currentUrl.substring(currentUrl.lastIndexOf('/') + 1);
+                        // Clean the filename for comparison
+                        const cleanedFilename = cleanString(filename);
+
+                        // Check if the cleaned filename contains the cleaned desired name
+                        if (cleanedFilename.includes(cleanedDesiredName)) {
+                            sortedUrls.push(currentUrl); // Add the found URL to our sorted list
+                            foundIndex = i; // Store the index to remove it from availableUrls
+                            foundMatch = true;
+                            break; // Move to the next desired name once a match is found
+                        }
+                    }
+
+                    if (foundMatch) {
+                        // Remove the matched URL from the availableUrls array to prevent re-matching
+                        availableUrls.splice(foundIndex, 1);
+                    } else {
+                        // If no URL was found for a desired name, add it to unmatched list
+                        unmatchedDesiredNames.push(desiredName);
+                    }
+                }
+
+                // Display the results
+                sortedUrlsOutput.value = sortedUrls.join('\n');
+
+                // Provide feedback to the user
+                if (unmatchedDesiredNames.length > 0) {
+                    showMessage(`Could not find URLs for the following names: ${unmatchedDesiredNames.join(', ')}. Please check your inputs.`, true);
+                } else if (availableUrls.length > 0) {
+                     // If there are still URLs left, it means some URLs didn't have a matching name in the desired list
+                    showMessage(`URLs sorted successfully, but ${availableUrls.length} URL(s) were not used as they didn't match any desired name.`, false);
+                }
+                else if (sortedUrls.length > 0) {
+                    showMessage("URLs sorted successfully!", false); // Green message for success
+                } else {
+                    showMessage("No URLs found after processing. Please check your input.", true);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
