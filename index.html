@@ -24,6 +24,18 @@
         textarea::-webkit-scrollbar-thumb:hover {
             background: #6a758a;
         }
+        .btn-green {
+            background-color: #10B981; /* Tailwind green-500 */
+        }
+        .btn-green:hover {
+            background-color: #059669; /* Tailwind green-600 */
+        }
+        .btn-red {
+            background-color: #EF4444; /* Tailwind red-500 */
+        }
+        .btn-red:hover {
+            background-color: #DC2626; /* Tailwind red-600 */
+        }
     </style>
 </head>
 <body class="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
@@ -34,6 +46,7 @@
             Each on a new line. Then, provide corresponding names for the output files.
         </p>
 
+        <!-- PNG URLs Input -->
         <div class="mb-6 text-left">
             <label for="pngUrlInput" class="block text-gray-200 text-sm font-bold mb-2">Image URLs:</label>
             <textarea id="pngUrlInput"
@@ -46,6 +59,7 @@ https://www.w3.org/People/mimasa/test/gif/sample.gif"
             ></textarea>
         </div>
 
+        <!-- Image Names Input -->
         <div class="mb-4 text-left">
             <label for="imageNamesInput" class="block text-gray-200 text-sm font-bold mb-2">Desired Output File Names:</label>
             <textarea id="imageNamesInput"
@@ -59,33 +73,43 @@ Sample_GIF"
             <p class="text-gray-400 text-xs mt-1">Make sure the number of names matches the number of URLs.</p>
         </div>
 
+        <!-- Sequential Naming Checkbox -->
         <div class="mb-6 text-left">
             <input type="checkbox" id="useSequentialNaming" class="mr-2 h-4 w-4 text-blue-600 rounded focus:ring-blue-500 border-gray-600 bg-gray-700">
             <label for="useSequentialNaming" class="text-gray-200 text-sm font-medium">Use Sequential Naming (e.g., "my_image_1.jpg" or "my_image_1.gif")</label>
         </div>
 
-        <button id="convertAndDownloadButton"
-                class="bg-blue-600 text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">
-            Process & Download All Files
-        </button>
+        <div class="flex flex-wrap justify-center gap-4">
+            <button id="processAllButton"
+                    class="bg-blue-600 text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">
+                Process & Download All Files
+            </button>
+            <button id="retryButton"
+                    class="btn-green text-white px-8 py-3 rounded-md font-semibold transition duration-300 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+                    style="display: none;">
+                Retry Failed Files
+            </button>
+        </div>
+
 
         <div id="statusMessage" class="mt-6 p-4 rounded-md text-sm text-center font-medium" style="display: none;"></div>
 
+        <!-- Hidden canvas for image conversion -->
         <canvas id="conversionCanvas" class="hidden"></canvas>
-
-        <div>
-            <a href="sort.html"><button> Sort </button></a>
-        </div>
     </div>
 
     <script>
         const pngUrlInput = document.getElementById('pngUrlInput');
         const imageNamesInput = document.getElementById('imageNamesInput');
         const useSequentialNamingCheckbox = document.getElementById('useSequentialNaming');
-        const convertAndDownloadButton = document.getElementById('convertAndDownloadButton');
+        const processAllButton = document.getElementById('processAllButton'); // Renamed
+        const retryButton = document.getElementById('retryButton'); // New button
         const statusMessage = document.getElementById('statusMessage');
         const canvas = document.getElementById('conversionCanvas');
         const ctx = canvas.getContext('2d');
+
+        // Stores information about files that failed during processing
+        let failedFiles = []; // Array of { url, baseFileName, originalIndex, useSequential, originalMimeType }
 
         /**
          * Displays a message to the user in the status area.
@@ -128,7 +152,154 @@ Sample_GIF"
             }
         }
 
-        convertAndDownloadButton.addEventListener('click', async () => {
+        /**
+         * Processes a single image URL: fetches, converts if PNG, and downloads.
+         * Updates success/failure counts.
+         * @param {object} fileInfo An object containing { url, baseFileName, originalIndex, useSequential, originalMimeType }
+         * @returns {Promise<boolean>} True if successful, false if failed.
+         */
+        async function processAndDownloadImage(fileInfo) {
+            const { url, baseFileName, originalIndex, useSequential, originalMimeType } = fileInfo;
+
+            // Determine the final filename including extension
+            let finalFileName;
+            let currentDisplayFileName = baseFileName; // For displaying in status message
+
+            // If it's a retry and we already know the original mime type
+            let effectiveMimeType = originalMimeType;
+
+            showStatus(`Processing file (${currentDisplayFileName})...`, 'info');
+
+            let response;
+            try {
+                response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            } catch (e) {
+                console.error(`Failed to fetch ${url}:`, e);
+                showStatus(`Failed to fetch ${url}: ${e.message}`, 'error');
+                return false;
+            }
+
+            const originalBlob = await response.blob();
+            // If originalMimeType was not passed (e.g., first run), determine it now
+            if (!effectiveMimeType) {
+                effectiveMimeType = originalBlob.type;
+            }
+
+
+            let finalBlobToDownload = null;
+            let finalExtension = '';
+
+            if (effectiveMimeType === 'image/png') {
+                // --- This is a PNG, convert to JPG ---
+                finalExtension = 'jpg';
+                const jpgDataUrl = await new Promise(resolve => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous"; // Crucial for cross-origin images
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        try {
+                            resolve(canvas.toDataURL('image/jpeg', 0.9));
+                        } catch (e) {
+                            console.error(`Error converting ${url} to JPG (likely CORS issue or tainted canvas):`, e);
+                            showStatus(`Error converting PNG from ${url} (CORS issue?): ${e.message}`, 'error');
+                            resolve(null); // Resolve with null on error
+                        } finally {
+                            URL.revokeObjectURL(img.src); // Clean up the object URL
+                        }
+                    };
+                    img.onerror = () => {
+                        console.error(`Error loading PNG to canvas from ${url} (possible network/image issue).`);
+                        showStatus(`Error loading PNG from ${url}. It might be corrupted or inaccessible.`, 'error');
+                        resolve(null); // Resolve with null on error
+                        URL.revokeObjectURL(img.src); // Clean up
+                    };
+                    img.src = URL.createObjectURL(originalBlob);
+                });
+
+                if (jpgDataUrl) {
+                    finalBlobToDownload = await (await fetch(jpgDataUrl)).blob();
+                } else {
+                    return false; // Conversion failed
+                }
+
+            } else if (effectiveMimeType.startsWith('image/')) {
+                // --- Not a PNG, but another image type, download as is ---
+                finalBlobToDownload = originalBlob;
+                finalExtension = effectiveMimeType.split('/')[1]; // e.g., 'jpeg', 'gif', 'webp'
+                if (finalExtension === 'jpeg') finalExtension = 'jpg'; // Normalize jpeg to jpg
+                if (finalExtension === 'svg+xml') finalExtension = 'svg'; // Normalize svg+xml to svg
+            } else {
+                // --- Not an image at all, skip ---
+                showStatus(`Skipping ${url}: Not a recognized image type (${effectiveMimeType}).`, 'info');
+                return false;
+            }
+
+            // Construct final filename
+            if (useSequential) {
+                 finalFileName = `${baseFileName}_${originalIndex + 1}.${finalExtension}`;
+            } else {
+                 finalFileName = `${baseFileName}.${finalExtension}`;
+            }
+
+            if (finalBlobToDownload) {
+                downloadFile(finalBlobToDownload, finalFileName);
+                return true;
+            } else {
+                showStatus(`Error: Could not prepare file for download from ${url}.`, 'error');
+                return false;
+            }
+        }
+
+        /**
+         * Main processing function for a list of files. Can be used for initial run or retry.
+         * @param {Array<object>} filesToProcess An array of file objects to process.
+         * @param {boolean} isRetry Flag to indicate if this is a retry operation.
+         */
+        async function runProcessing(filesToProcess, isRetry = false) {
+            processAllButton.disabled = true;
+            retryButton.disabled = true;
+            retryButton.style.display = 'none'; // Hide retry button at the start of any run
+
+            if (!isRetry) {
+                failedFiles = []; // Clear failed files only on a new full run
+            }
+
+            let successfulProcesses = 0;
+            let currentFailedFiles = []; // Temporarily store failures for this run
+
+            showStatus(`Starting ${isRetry ? 'retry' : 'initial'} process for ${filesToProcess.length} file(s)...`, 'info');
+
+            for (let i = 0; i < filesToProcess.length; i++) {
+                const fileInfo = filesToProcess[i];
+                const success = await processAndDownloadImage(fileInfo);
+                if (success) {
+                    successfulProcesses++;
+                } else {
+                    currentFailedFiles.push(fileInfo); // Add to current failures
+                }
+            }
+
+            // Update global failedFiles after the run
+            failedFiles = currentFailedFiles;
+
+            processAllButton.disabled = false;
+            retryButton.disabled = false;
+
+            if (failedFiles.length > 0) {
+                retryButton.style.display = 'inline-block'; // Show retry button if there are failures
+                showStatus(`Completed. ${successfulProcesses} file(s) processed, ${failedFiles.length} failed. See console for details. Retry available.`, 'info');
+            } else if (successfulProcesses > 0) {
+                showStatus(`All ${successfulProcesses} file(s) processed and downloaded successfully!`, 'success');
+            } else {
+                showStatus(`No files could be processed. Please check URLs and try again.`, 'error');
+            }
+        }
+
+
+        processAllButton.addEventListener('click', async () => {
             const urlsText = pngUrlInput.value.trim();
             const namesText = imageNamesInput.value.trim();
             const useSequential = useSequentialNamingCheckbox.checked;
@@ -151,31 +322,23 @@ Sample_GIF"
                 return;
             }
 
-            convertAndDownloadButton.disabled = true;
-            showStatus(`Starting process for ${imageUrls.length} file(s)...`, 'info');
-
-            let successfulProcesses = 0;
-            let failedProcesses = 0;
-
-            // Determine the base name for sequential numbering
+            // Determine the base name for sequential numbering for the entire batch
             let sequentialBaseName = 'converted_image';
             if (useSequential && imageNames.length > 0 && imageNames[0]) {
                 sequentialBaseName = imageNames[0]; // Use the first provided name as base
             }
 
-            for (let i = 0; i < imageUrls.length; i++) {
-                const url = imageUrls[i];
-
-                // Determine the base filename (without extension), considering sequential option
-                let baseFileName;
+            // Prepare the list of files to process for the initial run
+            const filesToProcess = imageUrls.map((url, i) => {
+                let baseNameForCurrentFile;
                 if (useSequential) {
-                    baseFileName = `${sequentialBaseName}_${i + 1}`;
+                    baseNameForCurrentFile = sequentialBaseName; // The base name doesn't change per file in sequential mode
                 } else {
                     let desiredName = imageNames[i];
                     if (desiredName) {
-                        baseFileName = desiredName;
+                        baseNameForCurrentFile = desiredName;
                     } else {
-                        // Fallback if no specific name is provided or if it's empty
+                        // Fallback: extract from URL, without extension
                         let urlFilename = url.substring(url.lastIndexOf('/') + 1);
                         if (urlFilename.includes('?')) {
                             urlFilename = urlFilename.substring(0, urlFilename.indexOf('?'));
@@ -183,102 +346,28 @@ Sample_GIF"
                         if (urlFilename.includes('.')) { // Remove existing extension from URL filename
                             urlFilename = urlFilename.substring(0, urlFilename.lastIndexOf('.'));
                         }
-                        if (!urlFilename || urlFilename.length === 0) {
-                            baseFileName = `image_${i + 1}`; // Generic fallback if URL has no good name
-                        } else {
-                            baseFileName = urlFilename;
-                        }
+                        baseNameForCurrentFile = urlFilename || `image_${i + 1}`; // Default generic
                     }
                 }
 
-                showStatus(`Processing file ${i + 1} of ${imageUrls.length} (${baseFileName})...`, 'info');
+                return {
+                    url: url,
+                    baseFileName: baseNameForCurrentFile, // This is the base name without sequential index added yet
+                    originalIndex: i, // Store original index for sequential naming
+                    useSequential: useSequential,
+                    originalMimeType: '' // Will be determined upon fetch
+                };
+            });
 
-                let response;
-                try {
-                    response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                } catch (e) {
-                    console.error(`Failed to fetch ${url}:`, e);
-                    showStatus(`Failed to fetch ${url}: ${e.message}`, 'error');
-                    failedProcesses++;
-                    continue; // Skip to next URL
-                }
+            await runProcessing(filesToProcess, false); // Start initial processing
+        });
 
-                const originalBlob = await response.blob();
-                const originalMimeType = originalBlob.type;
-
-                let finalBlobToDownload = null;
-                let finalExtension = '';
-
-                if (originalMimeType === 'image/png') {
-                    // --- This is a PNG, convert to JPG ---
-                    finalExtension = 'jpg';
-                    const jpgDataUrl = await new Promise(resolve => {
-                        const img = new Image();
-                        img.crossOrigin = "Anonymous"; // Crucial for cross-origin images
-                        img.onload = () => {
-                            canvas.width = img.width;
-                            canvas.height = img.height;
-                            ctx.drawImage(img, 0, 0);
-                            try {
-                                resolve(canvas.toDataURL('image/jpeg', 0.9));
-                            } catch (e) {
-                                console.error(`Error converting ${url} to JPG (likely CORS issue or tainted canvas):`, e);
-                                showStatus(`Error converting PNG from ${url} (CORS issue?): ${e.message}`, 'error');
-                                resolve(null); // Resolve with null on error
-                            } finally {
-                                URL.revokeObjectURL(img.src); // Clean up the object URL
-                            }
-                        };
-                        img.onerror = () => {
-                            console.error(`Error loading PNG to canvas from ${url} (possible network/image issue).`);
-                            showStatus(`Error loading PNG from ${url}. It might be corrupted or inaccessible.`, 'error');
-                            resolve(null); // Resolve with null on error
-                            URL.revokeObjectURL(img.src); // Clean up
-                        };
-                        img.src = URL.createObjectURL(originalBlob);
-                    });
-
-                    if (jpgDataUrl) {
-                        // Convert DataURL back to Blob for consistent downloadFile handling
-                        finalBlobToDownload = await (await fetch(jpgDataUrl)).blob();
-                    } else {
-                        failedProcesses++; // Count as failed if DataURL conversion failed
-                        continue;
-                    }
-
-                } else if (originalMimeType.startsWith('image/')) {
-                    // --- Not a PNG, but another image type, download as is ---
-                    finalBlobToDownload = originalBlob;
-                    finalExtension = originalMimeType.split('/')[1]; // e.g., 'jpeg', 'gif', 'webp'
-                    if (finalExtension === 'jpeg') finalExtension = 'jpg'; // Normalize jpeg to jpg
-                    if (finalExtension === 'svg+xml') finalExtension = 'svg'; // Normalize svg+xml to svg
-                } else {
-                    // --- Not an image at all, skip ---
-                    showStatus(`Skipping ${url}: Not a recognized image type (${originalMimeType}).`, 'info');
-                    failedProcesses++;
-                    continue;
-                }
-
-                // Perform download if a valid blob was prepared
-                if (finalBlobToDownload) {
-                    downloadFile(finalBlobToDownload, `${baseFileName}.${finalExtension}`);
-                    successfulProcesses++;
-                } else {
-                    failedProcesses++; // Should be caught by earlier null checks, but as a safeguard
-                    showStatus(`Error: Could not prepare file for download from ${url}.`, 'error');
-                }
+        retryButton.addEventListener('click', async () => {
+            if (failedFiles.length === 0) {
+                showStatus('No failed files to retry!', 'info');
+                return;
             }
-
-            convertAndDownloadButton.disabled = false;
-
-            if (successfulProcesses > 0 && failedProcesses === 0) {
-                showStatus(`All ${successfulProcesses} file(s) processed and downloaded successfully!`, 'success');
-            } else if (successfulProcesses > 0 && failedProcesses > 0) {
-                showStatus(`Completed. ${successfulProcesses} file(s) processed, ${failedProcesses} failed. Check console for details.`, 'info');
-            } else {
-                showStatus(`No files could be processed. Please check URLs and try again.`, 'error');
-            }
+            await runProcessing(failedFiles, true); // Retry only the failed files
         });
     </script>
 </body>
