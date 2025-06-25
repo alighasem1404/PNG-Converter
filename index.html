@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PNG to JPG Smart Converter & Downloader</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            background-color: #2d3748;
         }
         /* Custom scrollbar for textarea */
         textarea::-webkit-scrollbar {
@@ -167,18 +168,41 @@ Sample_GIF"
 
             // If it's a retry and we already know the original mime type
             let effectiveMimeType = originalMimeType;
+              
+            
 
-            showStatus(`Processing file (${currentDisplayFileName})...`, 'info');
+            // let response;
+            
+            // try {
+            //     response = await fetch(url);
+            //     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            // } catch (e) {
+            //     console.error(`Failed to fetch ${url}:`, e);
+            //     showStatus(`Failed to fetch ${url}: ${e.message}`, 'error');
+            //     return false;
+            // }
 
-            let response;
-            try {
-                response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            } catch (e) {
-                console.error(`Failed to fetch ${url}:`, e);
-                showStatus(`Failed to fetch ${url}: ${e.message}`, 'error');
-                return false;
+            let response = null;
+            let delay = 1500; // تأخیر بین هر تلاش
+            let attempt = 1; // شمارش تلاش‌ها
+            
+
+            while (true) { // حلقه بی‌نهایت
+                showStatus(`Processing file (${currentDisplayFileName})... Attempt: ${attempt}`, 'info');
+                try {
+                    response = await fetch(url);
+                    if (response.ok) {
+                        break; // اگر پاسخ موفق بود، از حلقه خارج می‌شویم
+                    } else {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                } catch (e) {
+                    console.warn(`Attempt ${attempt} failed to fetch ${url}. Retrying in ${delay}ms...`, e);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    attempt++;
+                }
             }
+
 
             const originalBlob = await response.blob();
             // If originalMimeType was not passed (e.g., first run), determine it now
